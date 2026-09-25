@@ -70,7 +70,9 @@ static void button_task(void *arg)
             if (pressed) {
                 char name[24];
                 ESP_LOGI(TAG, "Button pressed - taking photo");
-                if (camera_take_photo(PHOTO_USE_FLASH, name, sizeof(name)) == ESP_OK
+                if (!storage_ensure_mounted()) {
+                    ESP_LOGW(TAG, "No SD card - photo not taken");
+                } else if (camera_take_photo(PHOTO_USE_FLASH, name, sizeof(name)) == ESP_OK
                     && !PHOTO_USE_FLASH) {
                     ack_blink();
                 }
@@ -87,7 +89,7 @@ static void run_stream_mode(void)
         return;
     }
     if (storage_mount() != ESP_OK) {
-        ESP_LOGW(TAG, "No SD card - streaming only, photos can't be saved");
+        ESP_LOGW(TAG, "No SD card - will retry when a photo is taken");
     }
 
     net_start();

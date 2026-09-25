@@ -169,7 +169,7 @@ static esp_err_t capture_handler(httpd_req_t *req)
     char name[24];
     char json[64];
 
-    if (!storage_is_mounted()) {
+    if (!storage_ensure_mounted()) {
         httpd_resp_set_status(req, "503 Service Unavailable");
         return send_json(req, "{\"ok\":false,\"error\":\"no SD card\"}");
     }
@@ -186,10 +186,10 @@ static esp_err_t torch_handler(httpd_req_t *req)
     if (!require_login(req)) {
         return ESP_OK;
     }
-    char json[32];
-    flash_led_set(query_int(req, "level", 0));
-    snprintf(json, sizeof(json), "{\"level\":%d}", flash_led_get());
-    return send_json(req, json);
+    if (req->method == HTTP_POST) {
+        flash_led_set(query_int(req, "on", 0) ? CONFIG_FLASH_BRIGHTNESS : 0);
+    }
+    return send_json(req, flash_led_get() > 0 ? "{\"on\":true}" : "{\"on\":false}");
 }
 
 // JSON list of the photos on the SD card
@@ -199,12 +199,12 @@ static esp_err_t photos_list_handler(httpd_req_t *req)
         return ESP_OK;
     }
     httpd_resp_set_type(req, "application/json");
-    DIR *dir = storage_is_mounted() ? opendir(STORAGE_MOUNT_POINT) : NULL;
+    DIR *dir = storage_ensure_mounted() ? opendir(STORAGE_MOUNT_POINT) : NULL;
     if (!dir) {
-        return httpd_resp_sendstr(req, "[]");
+        return httpd_resp_sendstr(req, "{\"sd\":false,\"photos\":[]}");
     }
 
-    httpd_resp_sendstr_chunk(req, "[");
+    httpd_resp_sendstr_chunk(req, "{\"sd\":true,\"photos\":[");
     bool first = true;
     struct dirent *ent;
     while ((ent = readdir(dir)) != NULL) {
@@ -223,7 +223,7 @@ static esp_err_t photos_list_handler(httpd_req_t *req)
         first = false;
     }
     closedir(dir);
-    httpd_resp_sendstr_chunk(req, "]");
+    httpd_resp_sendstr_chunk(req, "]}");
     return httpd_resp_sendstr_chunk(req, NULL);
 }
 
@@ -307,6 +307,7 @@ esp_err_t web_start(void)
         {.uri = "/logout", .method = HTTP_POST, .handler = logout_handler},
         // State-changing actions are POST-only
         {.uri = "/capture", .method = HTTP_POST, .handler = capture_handler},
+        {.uri = "/torch", .method = HTTP_GET, .handler = torch_handler},
         {.uri = "/torch", .method = HTTP_POST, .handler = torch_handler},
         {.uri = "/photos", .method = HTTP_GET, .handler = photos_list_handler},
         {.uri = "/photos/*", .method = HTTP_GET, .handler = photo_file_handler},

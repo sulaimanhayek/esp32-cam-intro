@@ -1,0 +1,65 @@
+menu "ESP32-CAM App"
+
+    choice APP_MODE
+        prompt "Run mode"
+        default APP_MODE_STREAM
+        help
+            Stream: stays awake, serves a live MJPEG stream + web UI, and takes
+            photos from the web page or the button.
+            Timelapse: wakes from deep sleep on a timer (or the button), saves one
+            photo to the SD card and goes back to sleep.
+
+        config APP_MODE_STREAM
+            bool "WiFi live stream + web capture"
+        config APP_MODE_TIMELAPSE
+            bool "Low-power timelapse (deep sleep)"
+    endchoice
+
+    menu "WiFi (stream mode)"
+        config WIFI_SSID
+            string "Router SSID (leave empty to only run as access point)"
+            default ""
+        config WIFI_PASSWORD
+            string "Router password"
+            default ""
+        config WIFI_AP_SSID
+            string "Fallback access point SSID"
+            default "ESP32-CAM"
+            help
+                Used when no router SSID is set or connecting to it fails.
+        config WIFI_AP_PASSWORD
+            string "Fallback access point password (min 8 chars, empty = random)"
+            default ""
+            help
+                Leave empty to have each board generate its own random password on
+                first boot (stored in NVS and printed on the serial log).
+        config WIFI_HOSTNAME
+            string "mDNS hostname (<name>.local)"
+            default "esp32cam"
+    endmenu
+
+    config BUTTON_GPIO
+        int "Capture button GPIO (button to GND)"
+        default 13
+        help
+            GPIO13 is free when the SD card runs in 1-bit mode and is an RTC pin,
+            so it can also wake the board from deep sleep.
+
+    config TIMELAPSE_INTERVAL_SEC
+        int "Timelapse: seconds asleep between photos"
+        depends on APP_MODE_TIMELAPSE
+        default 60
+        range 5 86400
+
+    config PHOTO_USE_FLASH
+        bool "Fire the flash LED for button / timelapse photos"
+        default n
+
+    config FLASH_BRIGHTNESS
+        int "Flash LED brightness (%)"
+        default 60
+        range 1 100
+        help
+            The LED is very bright and gets hot at 100%.
+
+endmenu

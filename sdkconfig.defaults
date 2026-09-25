@@ -1,0 +1,16 @@
+CONFIG_IDF_TARGET="esp32"
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# AI-Thinker ESP32-CAM has 4MB (8MB chip) of external PSRAM
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_USE_MALLOC=y
+
+# Long file names on the SD card
+CONFIG_FATFS_LFN_HEAP=y
+
+# WiFi + camera + HTTP server don't fit the default 1MB app partition
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+
+# Skip the ~1s PSRAM self-test on every boot (matters for timelapse wakeups)
+CONFIG_SPIRAM_MEMTEST=n

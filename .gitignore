@@ -1,0 +1,14 @@
+# Build output
+build/
+managed_components/
+
+# Local config - may contain WiFi credentials, never commit
+sdkconfig
+sdkconfig.old
+
+# Editor / tooling
+.cache/
+.vscode/
+.clangd/
+compile_commands.json
+.DS_Store

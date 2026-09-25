@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESP32-CAM</title>
+<style>
+  :root { --bg: #111; --panel: #1c1c1c; --fg: #eee; --muted: #999; --accent: #ff9f1c; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.4 system-ui, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 18px; margin: 0 0 12px; }
+  .view { position: relative; background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 4 / 3; }
+  .view img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .view .off { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0; }
+  button { background: var(--panel); color: var(--fg); border: 1px solid #333; border-radius: 6px;
+           padding: 9px 14px; font: inherit; cursor: pointer; }
+  button.primary { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: wait; }
+  label { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  input[type=range] { width: 110px; }
+  #status { color: var(--muted); min-height: 1.4em; }
+  h2 { font-size: 15px; margin: 20px 0 8px; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #222; }
+  a { color: var(--accent); text-decoration: none; }
+  .size { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>ESP32-CAM</h1>
+
+  <div class="view">
+    <img id="stream" alt="">
+    <div class="off" id="off">Stream stopped</div>
+  </div>
+
+  <div class="controls">
+    <button id="toggle">Start stream</button>
+    <button id="capture" class="primary">Take photo</button>
+    <label><input type="checkbox" id="useFlash"> Flash</label>
+    <label>Torch <input type="range" id="torch" min="0" max="100" value="0"></label>
+  </div>
+  <div id="status"></div>
+
+  <h2>Photos on SD card</h2>
+  <ul id="photos"><li class="size">Loading...</li></ul>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const streamUrl = `http://${location.hostname}:81/stream`;
+let streaming = false;
+
+function setStream(on) {
+  streaming = on;
+  // Clearing src closes the connection, freeing the stream server for others
+  $('stream').src = on ? streamUrl : '';
+  $('off').style.display = on ? 'none' : 'grid';
+  $('toggle').textContent = on ? 'Stop stream' : 'Start stream';
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+}
+
+function fmtSize(bytes) {
+  return bytes > 1e6 ? (bytes / 1e6).toFixed(1) + ' MB' : Math.round(bytes / 1e3) + ' KB';
+}
+
+async function loadPhotos() {
+  const list = await (await fetch('/photos')).json();
+  list.sort((a, b) => b.name.localeCompare(a.name));
+  $('photos').innerHTML = list.length
+    ? list.map(p => `<li><a href="/photos/${encodeURIComponent(p.name)}" target="_blank">${esc(p.name)}</a>
+                     <span class="size">${fmtSize(p.size)}</span></li>`).join('')
+    : '<li class="size">No photos yet</li>';
+}
+
+$('toggle').onclick = () => setStream(!streaming);
+
+$('capture').onclick = async () => {
+  const btn = $('capture');
+  btn.disabled = true;
+  $('status').textContent = 'Capturing...';
+  try {
+    const res = await (await fetch('/capture?flash=' + ($('useFlash').checked ? 1 : 0))).json();
+    $('status').innerHTML = res.ok
+      ? `Saved <a href="/photos/${encodeURIComponent(res.file)}" target="_blank">${esc(res.file)}</a>`
+      : 'Error: ' + esc(res.error);
+    loadPhotos();
+  } catch (e) {
+    $('status').textContent = 'Error: ' + e;
+  }
+  btn.disabled = false;
+};
+
+$('torch').onchange = e => fetch('/torch?level=' + e.target.value);
+
+setStream(true);
+loadPhotos();
+</script>
+</body>
+</html>

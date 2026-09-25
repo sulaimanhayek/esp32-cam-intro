@@ -63,6 +63,30 @@ bool storage_is_mounted(void)
     return s_card != NULL;
 }
 
+bool storage_ensure_mounted(void)
+{
+    static int64_t s_last_try_us = INT64_MIN / 2;
+    static portMUX_TYPE s_try_mux = portMUX_INITIALIZER_UNLOCKED;
+
+    if (s_card) {
+        return true;
+    }
+    // A failed mount blocks for a while, so don't retry on every request
+    int64_t now = esp_timer_get_time();
+    bool try_now = false;
+    portENTER_CRITICAL(&s_try_mux);
+    if (now - s_last_try_us >= 3 * 1000000LL) {
+        s_last_try_us = now;
+        try_now = true;
+    }
+    portEXIT_CRITICAL(&s_try_mux);
+
+    if (try_now) {
+        storage_mount();
+    }
+    return s_card != NULL;
+}
+
 // Continue numbering after whatever IMG_NNNN.jpg files are already on the card
 static int scan_next_index(void)
 {

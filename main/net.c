@@ -6,13 +6,13 @@
 #include "freertos/event_groups.h"
 #include "esp_event.h"
 #include "esp_log.h"
-#include "esp_random.h"
 #include "esp_netif.h"
 #include "esp_wifi.h"
-#include "nvs.h"
 #include "nvs_flash.h"
 #include "mdns.h"
 #include "sdkconfig.h"
+
+#include "secret.h"
 
 static const char *TAG = "net";
 
@@ -73,35 +73,6 @@ static bool try_station(void)
     return false;
 }
 
-// Use the configured AP password, or a random per-device one kept in NVS so
-// no shared default password ships with the firmware.
-static void get_ap_password(char *out, size_t len)
-{
-    if (strlen(CONFIG_WIFI_AP_PASSWORD) >= 8) {
-        strlcpy(out, CONFIG_WIFI_AP_PASSWORD, len);
-        return;
-    }
-    if (strlen(CONFIG_WIFI_AP_PASSWORD) > 0) {
-        ESP_LOGW(TAG, "Configured AP password is under 8 chars - using a random one instead");
-    }
-
-    nvs_handle_t nvs;
-    ESP_ERROR_CHECK(nvs_open("net", NVS_READWRITE, &nvs));
-    size_t stored_len = len;
-    if (nvs_get_str(nvs, "ap_pass", out, &stored_len) != ESP_OK) {
-        // No look-alike characters (0/O, 1/l/I) so it's easy to type
-        static const char charset[] = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-        const size_t pass_len = 12;
-        for (size_t i = 0; i < pass_len && i < len - 1; i++) {
-            out[i] = charset[esp_random() % (sizeof(charset) - 1)];
-        }
-        out[pass_len < len - 1 ? pass_len : len - 1] = '\0';
-        ESP_ERROR_CHECK(nvs_set_str(nvs, "ap_pass", out));
-        ESP_ERROR_CHECK(nvs_commit(nvs));
-    }
-    nvs_close(nvs);
-}
-
 static void start_access_point(void)
 {
     esp_netif_create_default_wifi_ap();
@@ -115,7 +86,8 @@ static void start_access_point(void)
     };
     strlcpy((char *)cfg.ap.ssid, CONFIG_WIFI_AP_SSID, sizeof(cfg.ap.ssid));
     cfg.ap.ssid_len = strlen(CONFIG_WIFI_AP_SSID);
-    get_ap_password((char *)cfg.ap.password, sizeof(cfg.ap.password));
+    ESP_ERROR_CHECK(secret_get("ap_pass", CONFIG_WIFI_AP_PASSWORD,
+                               (char *)cfg.ap.password, sizeof(cfg.ap.password)));
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &cfg));

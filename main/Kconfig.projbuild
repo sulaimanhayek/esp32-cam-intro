@@ -38,6 +38,14 @@ menu "ESP32-CAM App"
             default "esp32cam"
     endmenu
 
+    config WEB_PASSWORD
+        string "Web UI password (min 8 chars, empty = random)"
+        default ""
+        help
+            Password for the web UI and stream. Leave empty to have each board
+            generate its own random password on first boot (stored in NVS and
+            printed on the serial log).
+
     config BUTTON_GPIO
         int "Capture button GPIO (button to GND)"
         default 13

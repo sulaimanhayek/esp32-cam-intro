@@ -26,14 +26,20 @@ idf.py -p /dev/cu.usbserial-10 flash monitor
 - On your router: `http://esp32cam.local/` (or the IP printed on the serial log)
 - Fallback access point: join `ESP32-CAM` and open `http://192.168.4.1/`. Unless you set `WIFI_AP_PASSWORD`, each board generates its own random password on first boot. It's printed on the serial log (`net: Access point "ESP32-CAM" up (password: ...)`).
 
+The UI asks for a password. Unless you set `WEB_PASSWORD`, each board generates its own on first boot and prints it on the serial log (`auth: Web UI password: ...`).
+
 | Endpoint | |
 |---|---|
-| `GET /` | Web UI |
+| `GET /` | Web UI (login page when not logged in) |
+| `POST /login` | Form field `password`; sets the session cookie |
+| `POST /logout` | Ends the session |
 | `GET :81/stream` | MJPEG live stream (800×600, one viewer at a time) |
-| `GET /capture?flash=0\|1` | Take a 1600×1200 photo, save to SD, returns `{"ok":true,"file":"IMG_0012.jpg"}` |
-| `GET /torch?level=0-100` | Flash LED as a steady light |
+| `POST /capture?flash=0\|1` | Take a 1600×1200 photo, save to SD, returns `{"ok":true,"file":"IMG_0012.jpg"}` |
+| `POST /torch?level=0-100` | Flash LED as a steady light |
 | `GET /photos` | JSON list of photos on the card |
 | `GET /photos/IMG_0012.jpg` | Download a photo |
+
+Everything except `/` and `/login` returns `401` without a valid session.
 
 ## Wiring
 
@@ -45,9 +51,11 @@ idf.py -p /dev/cu.usbserial-10 flash monitor
 
 - WiFi credentials live only in `sdkconfig`, which is gitignored. Don't put them in `sdkconfig.defaults`.
 - There is no shared default AP password. Each board gets a random one unless you set your own (min 8 chars), and the AP never falls back to an open network.
-- **The web UI has no login.** Anyone who can reach the board on the network can watch the stream, take photos and download them from the SD card. On the fallback AP, the WPA2 password is the only protection. On a home/shared network, treat it as visible to every device on that network.
-- The stream sends no CORS headers, so other websites open in your browser can't read camera frames.
-- Plain HTTP only (no TLS).
+- **Login required.** Every endpoint, including the stream on port 81, needs a valid session. The web password is random per device unless you set one (min 8 chars).
+- **Sessions:** 128-bit random tokens from the hardware RNG, kept in RAM only (a reboot logs everyone out). They expire after 12 h, with at most 4 at a time. The cookie is `HttpOnly` (scripts can't read it) and `SameSite=Strict` (other websites can't send requests with it, which blocks CSRF).
+- **Brute force:** after 5 wrong passwords, login locks for 30 s, doubling with each further failure up to 15 min. Passwords are compared in constant time.
+- **Other hardening:** state-changing actions are POST-only. Pages can't be framed (`X-Frame-Options: DENY`), responses aren't cached, the stream sends no CORS headers, and photo downloads only serve `IMG_*` files from the card root.
+- **Plain HTTP (no TLS).** The password and session cookie travel unencrypted, so only use it on networks you trust. On the fallback AP, WPA2 encrypts the link. The lockout is device-wide, so someone guessing passwords can also keep you locked out temporarily.
 
 ## Notes
 
